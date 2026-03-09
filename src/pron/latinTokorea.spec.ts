@@ -29,7 +29,7 @@ describe("latinToHangul", () => {
       ["music festival", "뮤직 페스티벌"],
       ["new project", "뉴 프로젝트"],
       ["thank you", "땡큐"],
-      ["zylphora", "질포라"],
+      ["zylphora", "질포라"],   // AI 추론용 단어
     ];
 
     for (const [input, expectedOutput] of cases) {

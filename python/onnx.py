@@ -5,15 +5,8 @@ import torch
 import torch.nn as nn
 import torch.onnx
 
-ENC_ONNX  = "encoder.onnx"
-DEC_ONNX  = "decoder_step.onnx"
-
-import json
-from pathlib import Path
-
-import torch
-import torch.nn as nn
-import torch.onnx
+ENC_ONNX = "encoder.onnx"
+DEC_ONNX = "decoder_step.onnx"
 
 
 class EncoderONNX(nn.Module):
@@ -27,7 +20,7 @@ class EncoderONNX(nn.Module):
         emb = self.s2s.encoder.dropout(emb)
 
         enc_out, enc_h = self.s2s.encoder.rnn(emb)
-        enc_mask = (src_ids != self.s2s.src_pad_id)
+        enc_mask = src_ids != self.s2s.src_pad_id
         fw = enc_h[-2]
         bw = enc_h[-1]
         h_cat = torch.cat([fw, bw], dim=-1)
@@ -50,8 +43,7 @@ class DecoderStepONNX(nn.Module):
 
 def dump_vocab(vocab_obj, out_path: Path):
     out_path.write_text(
-        json.dumps(vocab_obj, ensure_ascii=False, indent=2),
-        encoding="utf-8"
+        json.dumps(vocab_obj, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
 
@@ -74,11 +66,15 @@ def convert_onnx(
     hp = ckpt["hp"]
     sv = ckpt["sv"]
     tv = ckpt["tv"]
-    sv['unk_id'] = 3
-    tv['unk_id'] = 3
+    sv["unk_id"] = 3
+    tv["unk_id"] = 3
 
-    src_vocab_size = len(sv["itos"]) if sv.get("itos") is not None else len(sv.get("stoi", {}))
-    tgt_vocab_size = len(tv["itos"]) if tv.get("itos") is not None else len(tv.get("stoi", {}))
+    src_vocab_size = (
+        len(sv["itos"]) if sv.get("itos") is not None else len(sv.get("stoi", {}))
+    )
+    tgt_vocab_size = (
+        len(tv["itos"]) if tv.get("itos") is not None else len(tv.get("stoi", {}))
+    )
 
     s2s = Seq2Seq(
         src_vocab_size=src_vocab_size,
@@ -86,14 +82,13 @@ def convert_onnx(
         src_pad_id=int(sv["pad_id"]),
         tgt_pad_id=int(tv["pad_id"]),
         hp=hp,
-        dec_layers=int(hp["dec_layers"])
+        dec_layers=int(hp["dec_layers"]),
     ).eval()
 
     s2s.load_state_dict(ckpt["model_state"], strict=True)
 
     enc = EncoderONNX(s2s).eval()
     dec = DecoderStepONNX(s2s).eval()
-
 
     B, T = 1, 12
     src_ids = torch.randint(0, src_vocab_size, (B, T), dtype=torch.long)
@@ -112,14 +107,13 @@ def convert_onnx(
         opset_version=opset,
         do_constant_folding=True,
         dynamic_axes={
-            "src_ids":  {0: "batch", 1: "src_len"},
-            "enc_out":  {0: "batch", 1: "src_len"},
+            "src_ids": {0: "batch", 1: "src_len"},
+            "enc_out": {0: "batch", 1: "src_len"},
             "enc_mask": {0: "batch", 1: "src_len"},
-            "h0":       {1: "batch"},
+            "h0": {1: "batch"},
         },
         dynamo=False,
     )
-
 
     torch.onnx.export(
         dec,
@@ -130,19 +124,18 @@ def convert_onnx(
         opset_version=opset,
         do_constant_folding=True,
         dynamic_axes={
-            "y_t":      {0: "batch"},
-            "prev_h":   {1: "batch"},
-            "enc_out":  {0: "batch", 1: "src_len"},
+            "y_t": {0: "batch"},
+            "prev_h": {1: "batch"},
+            "enc_out": {0: "batch", 1: "src_len"},
             "enc_mask": {0: "batch", 1: "src_len"},
-            "logits":   {0: "batch"},
-            "next_h":   {1: "batch"},
+            "logits": {0: "batch"},
+            "next_h": {1: "batch"},
         },
         dynamo=False,
     )
 
     dump_vocab(sv, src_vocab_json)
     dump_vocab(tv, tgt_vocab_json)
-
 
     config = {
         "version": 1,
@@ -176,25 +169,24 @@ def convert_onnx(
                 "outputs": {
                     "enc_out": ["batch", "src_len", int(hp["hid"] * 2)],
                     "h0": [int(hp["dec_layers"]), "batch", int(hp["hid"])],
-                    "enc_mask": ["batch", "src_len"]
-                }
+                    "enc_mask": ["batch", "src_len"],
+                },
             },
             "decoder_step": {
                 "inputs": {
                     "y_t": ["batch"],
                     "prev_h": [int(hp["dec_layers"]), "batch", int(hp["hid"])],
                     "enc_out": ["batch", "src_len", int(hp["hid"] * 2)],
-                    "enc_mask": ["batch", "src_len"]
+                    "enc_mask": ["batch", "src_len"],
                 },
                 "outputs": {
                     "logits": ["batch", int(tgt_vocab_size)],
-                    "next_h": [int(hp["dec_layers"]), "batch", int(hp["hid"])]
-                }
-            }
-        }
+                    "next_h": [int(hp["dec_layers"]), "batch", int(hp["hid"])],
+                },
+            },
+        },
     }
 
     config_json.write_text(
-        json.dumps(config, ensure_ascii=False, indent=2),
-        encoding="utf-8"
+        json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8"
     )

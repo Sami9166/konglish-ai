@@ -1,6 +1,7 @@
 from pathlib import Path
 import random
 import unicodedata
+import numpy as np
 import re
 import torch
 
@@ -9,8 +10,11 @@ LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 
 def set_seed(seed: int):
-    import numpy as np
+    """random seed 설정
 
+    Args:
+        seed (int): _seed number_
+    """
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -18,6 +22,14 @@ def set_seed(seed: int):
 
 
 def norm_en(s: str) -> str:
+    """영어 정규화 함수
+
+    Args:
+        s (str): _english to normalize_
+
+    Returns:
+        str: _normalized english_
+    """
     s = unicodedata.normalize("NFKC", s)
     s = s.replace("’", "'").replace("‘", "'")
     s = s.replace("–", "-").replace("—", "-")
@@ -26,19 +38,39 @@ def norm_en(s: str) -> str:
 
 
 def norm_kr(s: str) -> str:
+    """한국어 정규화 함수
+
+    Args:
+        s (str): _korean to normalize_
+
+    Returns:
+        str: _normalized korean_
+    """
     s = unicodedata.normalize("NFKC", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
 
 def levenshtein(a: str, b: str) -> int:
+    """levenshtein distance 계산 함수
+
+    Args:
+        a (str): _string1 to evaluate_
+        b (str): _string2 to evaluate_
+
+    Returns:
+        int: _levenshtein distance 결과값_
+    """
     if a == b:
-        return 0
+        return 0    # 같으면 0점
+    
+    # 둘 중 하나가 0이면 distance는 나머지 하나의 길이
     if len(a) == 0:
         return len(b)
     if len(b) == 0:
         return len(a)
-    # ensure b is shorter for memory
+    
+    # b가 더 짧은 쪽이라 설정
     if len(a) < len(b):
         a, b = b, a
     prev = list(range(len(b) + 1))
@@ -54,6 +86,15 @@ def levenshtein(a: str, b: str) -> int:
 
 
 def cer(pred: str, gold: str) -> float:
+    """CER(Char Error Rate) 함수
+
+    Args:
+        pred (str): _model prediction_
+        gold (str): _golden data_
+
+    Returns:
+        float: _CER_
+    """
     gold_len = max(1, len(gold))
     return levenshtein(pred, gold) / gold_len
 
@@ -67,7 +108,7 @@ def augment_en_text(
     dup_drop_prob=0.02,
 ):
     """
-    영어 입력 문자열에 아주 약한 노이즈를 넣는다.
+    영어 입력 문자열에 아주 약한 노이즈를 넣음.
     학습 시에만 사용.
     """
     if random.random() > apply_prob:

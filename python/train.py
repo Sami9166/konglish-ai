@@ -1,34 +1,29 @@
+from typing import Dict, Any, Tuple, List
 from dataclasses import dataclass
 from tqdm import tqdm
-
-import numpy as np
-
 from utils import augment_en_text, cer
 from model import Seq2Seq
-
 from torch.utils.data import Dataset
 import torch
 import torch.nn as nn
+import numpy as np
 
 
 @dataclass
 class BaseCFG:
-    json_path: str = "new_dictionary.json"  # columns: en, kr
+    json_path: str = "new_dictionary.json"
     seed: int = 42
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # data
     val_ratio: float = 0.1
     test_ratio: float = 0.2
     batch: int = 256
 
-    # training budget per trial (튜닝은 싸게!)
     epochs: int = 4
     lr: float = 2e-3
     clip: float = 1.0
 
-    # decoding eval
-    eval_samples: int = 500  # val에서 CER 평가할 샘플 수(속도용)
+    eval_samples: int = 500  # val에서 CER 평가할 샘플 수
     beam: int = 5
     max_out: int = 64
     length_alpha: float = 0.7
@@ -158,12 +153,34 @@ class EarlyStopping:
             return self.count >= self.patience
 
 
-def eval_val_ce(model, val_df, sv, tv, crit, device, batch_size=256):
+def evaluate(
+    model: Seq2Seq,
+    val_df: PairDS,
+    sv: CharVocab,
+    tv: CharVocab,
+    crit,
+    device: torch.device,
+    batch_size: int = 256,
+) -> float:
+    """criterion 평가 함수
+
+    Args:
+        model (Seq2Seq): _model to evaluate_
+        val_df (PairDS): _dataset_
+        sv (CharVocab): _source vocab_
+        tv (CharVocab): _target vocab_
+        crit: _criterion_
+        device (torch.device): _eval device_
+        batch_size (int, optional): _data batch_. Defaults to 256.
+
+    Returns:
+        float: _eval score_
+    """
     loader = torch.utils.data.DataLoader(
         PairDS(val_df, sv, tv),
         batch_size=batch_size,
         shuffle=False,
-        collate_fn=lambda b: collate(b, sv.pad_id, tv.pad_id)
+        collate_fn=lambda b: collate(b, sv.pad_id, tv.pad_id),
     )
 
     model.eval()
@@ -176,10 +193,7 @@ def eval_val_ce(model, val_df, sv, tv, crit, device, batch_size=256):
         logits = model(x, xl, y, teacher_forcing=1.0)  # CE 평가용: TF=1 고정
         tgt = y[:, 1:]
 
-        loss = crit(
-            logits.reshape(-1, logits.size(-1)),
-            tgt.reshape(-1)
-        )
+        loss = crit(logits.reshape(-1, logits.size(-1)), tgt.reshape(-1))
 
         n_tok = (tgt != tv.pad_id).sum().item()
         total_loss += loss.item() * n_tok
@@ -189,6 +203,15 @@ def eval_val_ce(model, val_df, sv, tv, crit, device, batch_size=256):
 
 
 def get_tf_ratio(epoch: int, total_epochs: int) -> float:
+    """epoch 별 teacher forcing ratio를 변경하는 함수
+
+    Args:
+        epoch (int): _current epoch_
+        total_epochs (int): _total epoch_
+
+    Returns:
+        float: _teacher forcing ratio_
+    """
     if epoch <= int(total_epochs * 0.25):
         return 0.95
     elif epoch <= int(total_epochs * 0.50):
@@ -199,7 +222,27 @@ def get_tf_ratio(epoch: int, total_epochs: int) -> float:
         return 0.75
 
 
-def train_with_early_stopping(trn_df, val_df, sv, tv, hp, base: BaseCFG):
+def train_with_early_stopping(
+    trn_df: PairDS,
+    val_df: PairDS,
+    sv: CharVocab,
+    tv: CharVocab,
+    hp: Dict[str, Any],
+    base: BaseCFG,
+) -> Tuple[Seq2Seq, float, List[float]]:
+    """early stopping을 활용한 train 함수
+
+    Args:
+        trn_df (PairDS): _train dataset_
+        val_df (PairDS): _validation dataset_
+        sv (CharVocab): _source vocab_
+        tv (CharVocab): _target vocab_
+        hp (Dict[str, Any]): _hyperparameter_
+        base (BaseCFG): _base configuration_
+
+    Returns:
+       Tuple[Seq2Seq, float, List[float]]: _model, best cer, cer per epochs_
+    """
     device = base.device
 
     model = Seq2Seq(
@@ -256,7 +299,7 @@ def train_with_early_stopping(trn_df, val_df, sv, tv, hp, base: BaseCFG):
             opt.step()
 
         model.eval()
-        val_ce = eval_val_ce(
+        val_ce = evaluate(
             model, val_df, sv, tv, crit=crit, device=device, batch_size=hp["batch"]
         )
 
@@ -303,23 +346,60 @@ def train_with_early_stopping(trn_df, val_df, sv, tv, hp, base: BaseCFG):
 
     return model, stopper.best, history
 
+
 @torch.no_grad()
-def eval_on_test(model, test_df, sv, tv, device,
-                 beam=3, max_out=64, length_alpha=0.7,
-                 show_samples=20, seed=42):
+def eval_on_test(
+    model: Seq2Seq,
+    test_df: PairDS,
+    sv: CharVocab,
+    tv: CharVocab,
+    device: torch.device,
+    beam: int = 3,
+    max_out: int = 64,
+    length_alpha: float = 0.7,
+    show_samples: int = 20,
+    seed: int = 42,
+) -> Dict[str, Any]:
+    """test dataset evaluation
+
+    Args:
+        model (Seq2Seq): _model to evaluate_
+        test_df (PairDS): _test dataset_
+        sv (CharVocab): _source vocab_
+        tv (CharVocab): _target vocab_
+        device (torch.device): _torch device_
+        beam (int, optional): _beam search value_. Defaults to 3.
+        max_out (int, optional): _max output length_. Defaults to 64.
+        length_alpha (float, optional): _length alpha value_. Defaults to 0.7.
+        show_samples (int, optional): _number of samples to show_. Defaults to 20.
+        seed (int, optional): _seed value_. Defaults to 42.
+
+    Returns:
+        Dict[str, Any]: _mean cer, correct / wrong count, accuracy, cer list, sample list_
+    """
     model.eval()
     cers = []
     rows = []
-    correct_count = 0   # 완전 일치 단어의 수
+    correct_count = 0  # 완전 일치 단어의 수
     total_count = len(test_df)
 
     rng = np.random.default_rng(seed)
     idxs = np.arange(total_count)
     rng.shuffle(idxs)
-    show_set = set(idxs[:min(show_samples, total_count)].tolist())
+    show_set = set(idxs[: min(show_samples, total_count)].tolist())
 
-    for i, (en, kr) in enumerate(tqdm(zip(test_df["en"], test_df["kr"]), total=total_count, desc="TEST")):
-        pred = model.beam_decode(en, sv=sv, tv=tv, beam=beam, max_out=max_out, length_alpha=length_alpha, device=device)
+    for i, (en, kr) in enumerate(
+        tqdm(zip(test_df["en"], test_df["kr"]), total=total_count, desc="TEST")
+    ):
+        pred = model.beam_decode(
+            en,
+            sv=sv,
+            tv=tv,
+            beam=beam,
+            max_out=max_out,
+            length_alpha=length_alpha,
+            device=device,
+        )
 
         c = cer(pred, kr)
         cers.append(c)
@@ -334,13 +414,13 @@ def eval_on_test(model, test_df, sv, tv, device,
     accuracy = (correct_count / total_count) * 100
     mean_cer = float(np.mean(cers))
 
-    print("\n" + "="*30)
+    print("\n" + "=" * 30)
     print(f"TEST RESULT")
     print(f"Correct Words: {correct_count} / {total_count}")
     print(f"Wrong Words  : {wrong_count}")
     print(f"Accuracy     : {accuracy:.2f}%")
     print(f"Mean CER     : {mean_cer:.4f}")
-    print("="*30)
+    print("=" * 30)
 
     # CER이 높은 순서대로 샘플 정렬
     rows = sorted(rows, key=lambda r: r["cer"], reverse=True)
@@ -351,5 +431,5 @@ def eval_on_test(model, test_df, sv, tv, device,
         "wrong": wrong_count,
         "accuracy": accuracy,
         "cers": cers,
-        "samples": rows
+        "samples": rows,
     }

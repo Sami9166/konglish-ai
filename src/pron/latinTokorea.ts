@@ -34,6 +34,7 @@ export async function latinToHangulAsync(
   input: string,
   options?: LatinToHangulOptions,
 ): Promise<string> {
+  // async에서는 fallback으로 AI 추론 추가
   const fullKey = input.trim().toLowerCase();
   const userFullHit = options?.dictionary?.[fullKey];
   if (userFullHit?.length) return userFullHit[0];

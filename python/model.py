@@ -16,7 +16,7 @@ class Encoder(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        # weight initialization
+        # 가중치 초기화
         nn.init.normal_(self.emb.weight, std=0.01)
         for name, p in self.rnn.named_parameters():
             if 'weight_ih' in name: nn.init.xavier_uniform_(p)
@@ -36,11 +36,14 @@ class LuongAttention(nn.Module):
         self.wa = nn.Linear(hid_dim, hid_dim * 2)
 
     def forward(self, dec_h, enc_out, enc_mask=None):
+        # decoder hidden state에 가중치 연산
         wa_dec_h = self.wa(dec_h).unsqueeze(2)
 
+        # encoder result와 weight decoder hidden state를 dot product
         score = torch.bmm(enc_out, wa_dec_h).squeeze(2)
 
         if enc_mask is not None:
+            # <pad> 같은 곳에 mask 씌움
             score = score.masked_fill(~enc_mask, -1e10)
 
         attn_weights = F.softmax(score, dim=-1)
@@ -115,6 +118,7 @@ class Seq2Seq(nn.Module):
         enc_mask = (x != self.src_pad_id)
         h = self._init_dec_hidden(enc_h)
         beams = [([tv.sos_id], 0.0, h)]
+        
         for _ in range(max_out):
             new_beams = []
             for seq, score, h_state in beams:
@@ -128,5 +132,7 @@ class Seq2Seq(nn.Module):
             new_beams.sort(key=lambda b: b[1] / (len(b[0])**length_alpha), reverse=True)
             beams = new_beams[:beam]
             if all(b[0][-1] == tv.eos_id for b in beams): break
+            
         best_seq = beams[0][0][1:-1] if beams[0][0][-1] == tv.eos_id else beams[0][0][1:]
+        
         return tv.decode(best_seq)
