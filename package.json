@@ -15,7 +15,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "onnx_model"
   ],
   "scripts": {
     "build": "tsup --config tsup.config.ts",
