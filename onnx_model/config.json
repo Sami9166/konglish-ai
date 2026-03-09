@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "model_type": "seq2seq-gru-attn",
+  "src_vocab_size": 38,
+  "tgt_vocab_size": 1086,
+  "dims": {
+    "emb": 128,
+    "hid": 384,
+    "enc_layers": 3,
+    "dec_layers": 2,
+    "dropout": 0.35
+  },
+  "special_tokens": {
+    "src_pad_id": 0,
+    "tgt_pad_id": 0,
+    "sos_id": 1,
+    "eos_id": 2,
+    "unk_id": 3
+  },
+  "decode": {
+    "beam_size": 3,
+    "max_output_length": 30,
+    "length_alpha": 0.7
+  },
+  "onnx": {
+    "encoder_file": "encoder.onnx",
+    "decoder_file": "decoder_step.onnx",
+    "encoder": {
+      "inputs": {
+        "src_ids": [
+          "batch",
+          "src_len"
+        ]
+      },
+      "outputs": {
+        "enc_out": [
+          "batch",
+          "src_len",
+          768
+        ],
+        "h0": [
+          2,
+          "batch",
+          384
+        ],
+        "enc_mask": [
+          "batch",
+          "src_len"
+        ]
+      }
+    },
+    "decoder_step": {
+      "inputs": {
+        "y_t": [
+          "batch"
+        ],
+        "prev_h": [
+          2,
+          "batch",
+          384
+        ],
+        "enc_out": [
+          "batch",
+          "src_len",
+          768
+        ],
+        "enc_mask": [
+          "batch",
+          "src_len"
+        ]
+      },
+      "outputs": {
+        "logits": [
+          "batch",
+          1086
+        ],
+        "next_h": [
+          2,
+          "batch",
+          384
+        ]
+      }
+    }
+  }
+}
