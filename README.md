@@ -13,11 +13,11 @@
 ## 설치
 
 ```bash
-pnpm add konglish
+pnpm add konglish-ai
 # 또는
-npm install konglish
+npm install konglish-ai
 # 또는
-yarn add konglish
+yarn add konglish-ai
 ```
 
 ## 사용법
@@ -25,7 +25,7 @@ yarn add konglish
 ### 동기 함수
 
 ```ts
-import { latinToHangul } from "konglish";
+import { latinToHangul } from "konglish-ai";
 
 latinToHangul("good morning"); // "굿 모닝"
 latinToHangul("coffee time"); // "커피 타임"
@@ -40,7 +40,7 @@ latinToHangul("latte meetup zylphora"); // 라떼 밋업 zylphora
 ```
 ### 비동기 함수
 ```ts
-import { latinToHangulAsync } from "konglish";
+import { latinToHangulAsync } from "konglish-ai";
 
 await latinToHangulAsync("good morning"); // "굿 모닝"
 await latinToHangulAsync("coffee time"); // "커피 타임"
@@ -60,7 +60,7 @@ await latinToHangulAsync("latte meetup zylphora"); // 라떼 밋업 질포라
 ### 클래스 호출
 
 ```ts
-import { Konglish } from "konglish";
+import { Konglish } from "konglish-ai";
 
 const konglish = new Konglish({
   dictionary: {
