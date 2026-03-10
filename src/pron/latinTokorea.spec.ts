@@ -34,7 +34,7 @@ describe("latinToHangul", () => {
 
     for (const [input, expectedOutput] of cases) {
       await expect(
-        latinToHangulAsync(input, { modelDir: "./onnx_model" })
+        latinToHangulAsync(input)
       ).resolves.toBe(expectedOutput);
     }
   });

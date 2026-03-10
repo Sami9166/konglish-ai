@@ -109,13 +109,8 @@ async function transliterateTokensAsync(
       continue;
     }
 
-    if (options.modelDir) {
-      const pred = await predictHangulWithOnnx(token.text, options.modelDir);
-      out.push(pred ?? token.text);
-      continue;
-    }
-
-    out.push(token.text);
+    const pred = await predictHangulWithOnnx(token.text, options.modelDir);
+    out.push(pred ?? token.text);
   }
 
   return out.join("");
