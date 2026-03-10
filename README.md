@@ -13,11 +13,11 @@
 ## 설치
 
 ```bash
-pnpm add konglish
+pnpm add konglish-ai
 # 또는
-npm install konglish
+npm install konglish-ai
 # 또는
-yarn add konglish
+yarn add konglish-ai
 ```
 
 ## 사용법
